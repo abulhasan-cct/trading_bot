@@ -136,9 +136,9 @@ def generate_signal(indicators):
         ema20 = indicators["EMA20"]
         macd = indicators["MACD"]
         macd_signal = indicators["MACD_Signal"]
-        if rsi < 30 and ema5 > ema20 and macd > macd_signal:
+        if rsi < 40 and ema5 > ema20 and macd > macd_signal:
             return 'BUY'
-        elif rsi > 53 and ema5 < ema20 and macd < macd_signal:
+        elif rsi > 60 and ema5 < ema20 and macd < macd_signal:
             return 'SELL'
     return None
 
@@ -291,7 +291,7 @@ def run_dashboard():
 
         if epic == ASSET:
             # Example condition to close a position: if unrealized P/L is greater than a certain threshold
-            if upl > 5:  # Adjust this value as needed
+            if upl > 15:  # Adjust this value as needed
                 close_position(deal_id)
                 st.markdown(f"<p style='font-size: 14px; color: green;'>✅ **Position Closed:** {epic} - {direction} {upl}</p>", unsafe_allow_html=True)
 
