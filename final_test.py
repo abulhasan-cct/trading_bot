@@ -109,22 +109,31 @@ def get_historical_prices(epic, resolution='MINUTE_15', max_points=1000, from_da
 def calculate_indicators(epic):
     historical_data = get_historical_prices(epic)
     candles = historical_data.get("prices", [])
+    
     if len(candles) < 100:  # Ensure there are enough data points
         logging.warning(f"Insufficient historical data points: {len(candles)}")
         return None
-    close_prices = np.array([float(item['closePrice']['ask']) for item in candles])
-    rsi = np.atleast_1d(ta.RSI(close_prices, timeperiod=14))
-    ema5 = np.atleast_1d(ta.EMA(close_prices, timeperiod=5))
-    ema20 = np.atleast_1d(ta.EMA(close_prices, timeperiod=20))
-    macd, macd_signal, _ = ta.MACD(close_prices, fastperiod=12, slowperiod=26, signalperiod=9)
-    macd = np.atleast_1d(macd)
-    macd_signal = np.atleast_1d(macd_signal)
+
+    # Convert to DataFrame
+    df = pd.DataFrame(candles)
+    df['close'] = df['closePrice'].apply(lambda x: float(x['ask']))  # Extract close price
+
+    # Compute Indicators
+    df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
+    df['ema5'] = ta.trend.EMAIndicator(df['close'], window=5).ema_indicator()
+    df['ema20'] = ta.trend.EMAIndicator(df['close'], window=20).ema_indicator()
+
+    macd = ta.trend.MACD(df['close'], window_slow=26, window_fast=12, window_sign=9)
+    df['macd'] = macd.macd()
+    df['macd_signal'] = macd.macd_signal()
+
+    # Get the latest values and handle NaN cases
     return {
-        "RSI": rsi[-1] if not np.isnan(rsi[-1]) else None,
-        "EMA5": ema5[-1] if not np.isnan(ema5[-1]) else None,
-        "EMA20": ema20[-1] if not np.isnan(ema20[-1]) else None,
-        "MACD": macd[-1] if not np.isnan(macd[-1]) else None,
-        "MACD_Signal": macd_signal[-1] if not np.isnan(macd_signal[-1]) else None
+        "RSI": df['rsi'].iloc[-1] if not pd.isna(df['rsi'].iloc[-1]) else None,
+        "EMA5": df['ema5'].iloc[-1] if not pd.isna(df['ema5'].iloc[-1]) else None,
+        "EMA20": df['ema20'].iloc[-1] if not pd.isna(df['ema20'].iloc[-1]) else None,
+        "MACD": df['macd'].iloc[-1] if not pd.isna(df['macd'].iloc[-1]) else None,
+        "MACD_Signal": df['macd_signal'].iloc[-1] if not pd.isna(df['macd_signal'].iloc[-1]) else None
     }
 
 # 📌 GENERATE TRADE SIGNAL
