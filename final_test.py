@@ -5,7 +5,6 @@ import requests
 import logging
 import streamlit as st
 import numpy as np
-# import talib
 import ta
 import pandas as pd
 from datetime import datetime, timedelta, timezone
