@@ -1,0 +1,8 @@
+streamlit
+numpy
+pandas
+ta
+requests
+logging
+http.client
+json
