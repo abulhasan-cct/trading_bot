@@ -40,36 +40,6 @@ def send_telegram_message(message):
     except Exception as e:
         logging.error(f"⚠️ Error while sending Telegram message: {e}")
 
-# # 📌 AUTHENTICATION FUNCTION
-# def authenticate():
-#     global security_token, cst_token
-#     conn = http.client.HTTPSConnection(BASE_URL)
-#     payload = json.dumps({"identifier": API_EMAIL, "password": API_PASSWORD})
-#     headers = {'X-CAP-API-KEY': API_KEY, 'Content-Type': 'application/json'}
-
-#     conn.request("POST", "/api/v1/session", payload, headers)
-#     res = conn.getresponse()
-#     data = json.loads(res.read().decode("utf-8"))
-
-#     if "errorCode" in data:
-#         logging.error(f"❌ Authentication failed: {data}")
-#         return False
-
-#     headers = dict(res.getheaders())
-#     security_token = headers.get("X-SECURITY-TOKEN")
-#     cst_token = headers.get("CST")
-
-#     if not security_token or not cst_token:
-#         logging.error("❌ Missing tokens in authentication response headers.")
-#         return False
-
-#     logging.info("✅ Authentication Successful!")
-#     time.sleep(10)
-#     if 'initial_message_sent' not in st.session_state:
-#         send_telegram_message("🚀 Trading Bot Started Successfully!")
-#         st.session_state.initial_message_sent = True
-#     return True
-
 # 📌 AUTHENTICATION FUNCTION
 def authenticate():
     global security_token, cst_token
@@ -94,13 +64,12 @@ def authenticate():
         return False
 
     logging.info("✅ Authentication Successful!")
-    logging.info(f"Security Token: {security_token}")
-    logging.info(f"CST Token: {cst_token}")
     time.sleep(10)
     if 'initial_message_sent' not in st.session_state:
         send_telegram_message("🚀 Trading Bot Started Successfully!")
         st.session_state.initial_message_sent = True
     return True
+
 # 📌 FETCH MARKET DATA
 def get_market_data(epic):
     conn = http.client.HTTPSConnection(BASE_URL)
@@ -168,7 +137,7 @@ def generate_signal(indicators):
         close = indicators["close"]
         if rsi < 30 and ema > close:  # Buy signal
             return 'BUY'
-        elif rsi > 60 and ema < close:  # Sell signal
+        elif rsi > 70 and ema < close:  # Sell signal
             return 'SELL'
     return None
 
@@ -230,36 +199,15 @@ def place_trade(signal, epic, price):
     send_telegram_message(f"📊 Trade executed: {signal} {epic} | Entry: {price} | SL: {stop_loss} | TP: {take_profit}")
     return data
 
-# # 📌 FETCH WALLET BALANCE
-# def get_wallet_balance():
-#     conn = http.client.HTTPSConnection(BASE_URL)
-#     headers = {'X-SECURITY-TOKEN': security_token, 'CST': cst_token}
-#     conn.request("GET", "/api/v1/accounts", headers=headers)
-#     res = conn.getresponse()
-#     data = json.loads(res.read().decode("utf-8"))
-#     return data  # Return the full JSON response
-
 # 📌 FETCH WALLET BALANCE
 def get_wallet_balance():
     conn = http.client.HTTPSConnection(BASE_URL)
-    headers = {
-        'X-SECURITY-TOKEN': security_token,
-        'CST': cst_token,
-        'Content-Type': 'application/json'
-    }
-    logging.info(f"Headers: {headers}")
-    try:
-        conn.request("GET", "/api/v1/accounts", headers=headers)
-        res = conn.getresponse()
-        data = json.loads(res.read().decode("utf-8"))
-        if "errorCode" in data:
-            logging.error(f"❌ Error fetching wallet balance: {data}")
-            return None
-        return data  # Return the full JSON response
-    except Exception as e:
-        logging.error(f"❌ Exception occurred: {e}")
-        return None
-        
+    headers = {'X-SECURITY-TOKEN': security_token, 'CST': cst_token}
+    conn.request("GET", "/api/v1/accounts", headers=headers)
+    res = conn.getresponse()
+    data = json.loads(res.read().decode("utf-8"))
+    return data  # Return the full JSON response
+
 # 📌 STREAMLIT DASHBOARD
 def run_dashboard():
     # Check if the title and subtitle have already been displayed
@@ -285,52 +233,50 @@ def run_dashboard():
     signal = generate_signal(indicators)
 
     # 📌 Fetch Wallet Balance
-if 'wallet_balance_displayed' not in st.session_state:
-    balances = get_wallet_balance()
-    st.markdown("<h3 style='font-size: 16px;'>💰 Wallet Balances</h3>", unsafe_allow_html=True)
-    st.session_state.wallet_balance_displayed = st.empty()
+    if 'wallet_balance_displayed' not in st.session_state:
+        balances = get_wallet_balance()
+        st.markdown("<h3 style='font-size: 16px;'>💰 Wallet Balances</h3>", unsafe_allow_html=True)
+        st.session_state.wallet_balance_displayed = st.empty()
 
-# Update wallet balance in each loop
-balances = get_wallet_balance()
-if balances:
-    balance_table = "<table style='font-size: 14px;'><tr><th>Account</th><th>Balance</th><th>Deposit</th><th>Profit/Loss</th><th>Available</th></tr>"
-    for account in balances.get("accounts", []):
-        account_name = account.get("accountName", "Unknown")
-        currency = account.get("currency", "Unknown")
-        symbol = account.get("symbol", "")
-        balance = account.get("balance", {}).get("balance", 0)
-        deposit = account.get("balance", {}).get("deposit", 0)
-        profit_loss = account.get("balance", {}).get("profitLoss", 0)
-        available = account.get("balance", {}).get("available", 0)
-        balance_table += f"<tr><td>{account_name}</td><td>{symbol}{balance}</td><td>{symbol}{deposit}</td><td>{symbol}{profit_loss}</td><td>{symbol}{available}</td></tr>"
-    balance_table += "</table>"
-    st.session_state.wallet_balance_displayed.markdown(balance_table, unsafe_allow_html=True)
+    balances = get_wallet_balance()
+    if balances:
+        balance_table = "<table style='font-size: 14px;'><tr><th>Account</th><th>Balance</th><th>Deposit</th><th>Profit/Loss</th><th>Available</th></tr>"
+        for account in balances.get("accounts", []):
+            account_name = account.get("accountName", "Unknown")
+            currency = account.get("currency", "Unknown")
+            symbol = account.get("symbol", "")
+            balance = account.get("balance", {}).get("balance", 0)
+            deposit = account.get("balance", {}).get("deposit", 0)
+            profit_loss = account.get("balance", {}).get("profitLoss", 0)
+            available = account.get("balance", {}).get("available", 0)
+            balance_table += f"<tr><td>{account_name}</td><td>{symbol}{balance}</td><td>{symbol}{deposit}</td><td>{symbol}{profit_loss}</td><td>{symbol}{available}</td></tr>"
+        balance_table += "</table>"
+        st.session_state.wallet_balance_displayed.markdown(balance_table, unsafe_allow_html=True)
 
     # 📌 Fetch and Display Open Positions
-if 'open_positions_displayed' not in st.session_state:
-    open_positions = get_open_positions()
-    st.markdown("<h3 style='font-size: 16px;'>📊 Open Positions</h3>", unsafe_allow_html=True)
-    st.session_state.open_positions_displayed = st.empty()
+    if 'open_positions_displayed' not in st.session_state:
+        open_positions = get_open_positions()
+        st.markdown("<h3 style='font-size: 16px;'>📊 Open Positions</h3>", unsafe_allow_html=True)
+        st.session_state.open_positions_displayed = st.empty()
 
-# Update open positions in each loop
-open_positions = get_open_positions()
-if open_positions:
-    positions_table = "<table style='font-size: 14px;'><tr><th>Position</th><th>Unrealized P/L</th><th>Created Date</th><th>Instrument</th></tr>"
-    for position in open_positions:
-        market = position.get("market", {})
-        position_info = position.get("position", {})
-        epic = market.get("epic", "Unknown")
-        instrument_name = market.get("instrumentName", "Unknown")
-        direction = position_info.get("direction", "Unknown")
-        size = position_info.get("size", 0)
-        level = position_info.get("level", 0)
-        upl = position_info.get("upl", 0)
-        created_date = position_info.get("createdDate", "Unknown")
-        positions_table += f"<tr><td>{instrument_name} ({epic}) - {direction} {size} @ {level}</td><td>${upl}</td><td>{created_date}</td><td>{instrument_name}</td></tr>"
-    positions_table += "</table>"
-    st.session_state.open_positions_displayed.markdown(positions_table, unsafe_allow_html=True)
-else:
-    st.session_state.open_positions_displayed.markdown("<p style='font-size: 14px;'>No open positions.</p>", unsafe_allow_html=True)
+    open_positions = get_open_positions()
+    if open_positions:
+        positions_table = "<table style='font-size: 14px;'><tr><th>Position</th><th>Unrealized P/L</th><th>Created Date</th><th>Instrument</th></tr>"
+        for position in open_positions:
+            market = position.get("market", {})
+            position_info = position.get("position", {})
+            epic = market.get("epic", "Unknown")
+            instrument_name = market.get("instrumentName", "Unknown")
+            direction = position_info.get("direction", "Unknown")
+            size = position_info.get("size", 0)
+            level = position_info.get("level", 0)
+            upl = position_info.get("upl", 0)
+            created_date = position_info.get("createdDate", "Unknown")
+            positions_table += f"<tr><td>{instrument_name} ({epic}) - {direction} {size} @ {level}</td><td>${upl}</td><td>{created_date}</td><td>{instrument_name}</td></tr>"
+        positions_table += "</table>"
+        st.session_state.open_positions_displayed.markdown(positions_table, unsafe_allow_html=True)
+    else:
+        st.session_state.open_positions_displayed.markdown("<p style='font-size: 14px;'>No open positions.</p>", unsafe_allow_html=True)
 
     # 📌 Close Open Positions if Necessary
     open_positions = get_open_positions()
