@@ -40,6 +40,36 @@ def send_telegram_message(message):
     except Exception as e:
         logging.error(f"⚠️ Error while sending Telegram message: {e}")
 
+# # 📌 AUTHENTICATION FUNCTION
+# def authenticate():
+#     global security_token, cst_token
+#     conn = http.client.HTTPSConnection(BASE_URL)
+#     payload = json.dumps({"identifier": API_EMAIL, "password": API_PASSWORD})
+#     headers = {'X-CAP-API-KEY': API_KEY, 'Content-Type': 'application/json'}
+
+#     conn.request("POST", "/api/v1/session", payload, headers)
+#     res = conn.getresponse()
+#     data = json.loads(res.read().decode("utf-8"))
+
+#     if "errorCode" in data:
+#         logging.error(f"❌ Authentication failed: {data}")
+#         return False
+
+#     headers = dict(res.getheaders())
+#     security_token = headers.get("X-SECURITY-TOKEN")
+#     cst_token = headers.get("CST")
+
+#     if not security_token or not cst_token:
+#         logging.error("❌ Missing tokens in authentication response headers.")
+#         return False
+
+#     logging.info("✅ Authentication Successful!")
+#     time.sleep(10)
+#     if 'initial_message_sent' not in st.session_state:
+#         send_telegram_message("🚀 Trading Bot Started Successfully!")
+#         st.session_state.initial_message_sent = True
+#     return True
+
 # 📌 AUTHENTICATION FUNCTION
 def authenticate():
     global security_token, cst_token
@@ -64,12 +94,13 @@ def authenticate():
         return False
 
     logging.info("✅ Authentication Successful!")
+    logging.info(f"Security Token: {security_token}")
+    logging.info(f"CST Token: {cst_token}")
     time.sleep(10)
     if 'initial_message_sent' not in st.session_state:
         send_telegram_message("🚀 Trading Bot Started Successfully!")
         st.session_state.initial_message_sent = True
     return True
-
 # 📌 FETCH MARKET DATA
 def get_market_data(epic):
     conn = http.client.HTTPSConnection(BASE_URL)
@@ -199,15 +230,36 @@ def place_trade(signal, epic, price):
     send_telegram_message(f"📊 Trade executed: {signal} {epic} | Entry: {price} | SL: {stop_loss} | TP: {take_profit}")
     return data
 
+# # 📌 FETCH WALLET BALANCE
+# def get_wallet_balance():
+#     conn = http.client.HTTPSConnection(BASE_URL)
+#     headers = {'X-SECURITY-TOKEN': security_token, 'CST': cst_token}
+#     conn.request("GET", "/api/v1/accounts", headers=headers)
+#     res = conn.getresponse()
+#     data = json.loads(res.read().decode("utf-8"))
+#     return data  # Return the full JSON response
+
 # 📌 FETCH WALLET BALANCE
 def get_wallet_balance():
     conn = http.client.HTTPSConnection(BASE_URL)
-    headers = {'X-SECURITY-TOKEN': security_token, 'CST': cst_token}
-    conn.request("GET", "/api/v1/accounts", headers=headers)
-    res = conn.getresponse()
-    data = json.loads(res.read().decode("utf-8"))
-    return data  # Return the full JSON response
-
+    headers = {
+        'X-SECURITY-TOKEN': security_token,
+        'CST': cst_token,
+        'Content-Type': 'application/json'
+    }
+    logging.info(f"Headers: {headers}")
+    try:
+        conn.request("GET", "/api/v1/accounts", headers=headers)
+        res = conn.getresponse()
+        data = json.loads(res.read().decode("utf-8"))
+        if "errorCode" in data:
+            logging.error(f"❌ Error fetching wallet balance: {data}")
+            return None
+        return data  # Return the full JSON response
+    except Exception as e:
+        logging.error(f"❌ Exception occurred: {e}")
+        return None
+        
 # 📌 STREAMLIT DASHBOARD
 def run_dashboard():
     # Check if the title and subtitle have already been displayed
