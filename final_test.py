@@ -374,10 +374,14 @@ def run_dashboard():
         st.session_state[f"indicators_displayed_{ASSET}"]["col1"].markdown(f"<p style='font-size: 14px;'>RSI: {indicators['RSI'] if indicators['RSI'] is not None else 'N/A'}</p>", unsafe_allow_html=True)
         st.session_state[f"indicators_displayed_{ASSET}"]["col2"].markdown(f"<p style='font-size: 14px;'>EMA: {indicators['EMA'] if indicators['EMA'] is not None else 'N/A'}</p>", unsafe_allow_html=True)
 
-    # Generate and Execute Trade Signal
+# Generate and Execute Trade Signal
     if signal:
         open_positions = get_open_positions()
-        if len(open_positions) < 5:  # Check if the number of open positions is less than 5
+        if len(open_positions) >= 5:
+            if 'max_positions_message_displayed' not in st.session_state:
+                st.markdown("<p style='font-size: 14px; color: orange;'>⚠️ **Max Open Positions Reached. No new trades will be placed.**</p>", unsafe_allow_html=True)
+                st.session_state.max_positions_message_displayed = True
+        else:
             price = market_data.get("snapshot", {}).get("offer", "N/A")
             if price != "N/A":
                 place_trade(signal, ASSET, price)
@@ -389,8 +393,6 @@ def run_dashboard():
                 if 'price_warning_displayed' not in st.session_state or not st.session_state.price_warning_displayed:
                     st.markdown(f"<p style='font-size: 14px; color: red;'>⚠️ No valid price for {ASSET}.</p>", unsafe_allow_html=True)
                     st.session_state.price_warning_displayed = True
-        else:
-            st.markdown("<p style='font-size: 14px; color: orange;'>⚠️ **Max Open Positions Reached. No new trades will be placed.**</p>", unsafe_allow_html=True)
     else:
         if 'no_signal_info_displayed' not in st.session_state or not st.session_state.no_signal_info_displayed:
             st.markdown("<p style='font-size: 14px; color: orange;'>📉 **No Trade Signal Generated**</p>", unsafe_allow_html=True)
