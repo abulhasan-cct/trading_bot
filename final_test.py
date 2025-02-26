@@ -81,6 +81,56 @@ def get_market_data(epic):
         logging.error(f"❌ Error fetching market data for {epic}: {data}")
     return data
 
+# # 📌 FETCH HISTORICAL PRICES
+# def get_historical_prices(epic, resolution='MINUTE_15', max_points=1000, from_date=None, to_date=None):
+#     conn = http.client.HTTPSConnection(BASE_URL)
+#     headers = {'X-SECURITY-TOKEN': security_token, 'CST': cst_token}
+    
+#     query = f"/api/v1/prices/{epic}?resolution={resolution}&max={max_points}"
+    
+#     if from_date:
+#         query += f"&from={from_date.isoformat()}"
+#     if to_date:
+#         query += f"&to={to_date.isoformat()}"
+    
+#     conn.request("GET", query, headers=headers)
+#     res = conn.getresponse()
+#     data = json.loads(res.read().decode("utf-8"))
+    
+#     if "errorCode" in data:
+#         logging.error(f"❌ Error fetching historical prices for {epic}: {data}")
+#         return None
+    
+#     return data
+
+
+
+# # 📌 CALCULATE TECHNICAL INDICATORS (RSI, EMA)
+# def calculate_indicators(epic):
+#     historical_data = get_historical_prices(epic)
+#     if not historical_data:
+#         return None
+#     candles = historical_data.get("prices", [])
+    
+#     if len(candles) < 100:  # Ensure there are enough data points
+#         logging.warning(f"Insufficient historical data points: {len(candles)}")
+#         return None
+
+#     # Convert to DataFrame
+#     df = pd.DataFrame(candles)
+#     df['close'] = df['closePrice'].apply(lambda x: float(x['ask']))  # Extract close price
+
+#     # Compute Indicators
+#     df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
+#     df['ema'] = ta.trend.EMAIndicator(df['close'], window=20).ema_indicator()
+
+#     # Get the latest values and handle NaN cases
+#     return {
+#         "RSI": df['rsi'].iloc[-1] if not pd.isna(df['rsi'].iloc[-1]) else None,
+#         "EMA": df['ema'].iloc[-1] if not pd.isna(df['ema'].iloc[-1]) else None,
+#         "close": df['close'].iloc[-1] if not pd.isna(df['close'].iloc[-1]) else None
+#     }
+
 # 📌 FETCH HISTORICAL PRICES
 def get_historical_prices(epic, resolution='MINUTE_15', max_points=1000, from_date=None, to_date=None):
     conn = http.client.HTTPSConnection(BASE_URL)
@@ -93,16 +143,29 @@ def get_historical_prices(epic, resolution='MINUTE_15', max_points=1000, from_da
     if to_date:
         query += f"&to={to_date.isoformat()}"
     
-    conn.request("GET", query, headers=headers)
-    res = conn.getresponse()
-    data = json.loads(res.read().decode("utf-8"))
-    
-    if "errorCode" in data:
-        logging.error(f"❌ Error fetching historical prices for {epic}: {data}")
+    try:
+        conn.request("GET", query, headers=headers)
+        res = conn.getresponse()
+        data = res.read().decode("utf-8")
+        
+        if res.status != 200:
+            logging.error(f"❌ Error fetching historical prices for {epic}: HTTP {res.status} - {data}")
+            return None
+        
+        data = json.loads(data)
+        
+        if "errorCode" in data:
+            logging.error(f"❌ Error fetching historical prices for {epic}: {data}")
+            return None
+        
+        return data
+    except json.JSONDecodeError as e:
+        logging.error(f"❌ JSON Decode Error: {e}")
         return None
-    
-    return data
-
+    except Exception as e:
+        logging.error(f"❌ Exception occurred while fetching historical prices for {epic}: {e}")
+        return None
+        
 # 📌 CALCULATE TECHNICAL INDICATORS (RSI, EMA)
 def calculate_indicators(epic):
     historical_data = get_historical_prices(epic)
@@ -313,21 +376,26 @@ def run_dashboard():
 
     # Generate and Execute Trade Signal
     if signal:
-        price = market_data.get("snapshot", {}).get("offer", "N/A")
-        if price != "N/A":
-            place_trade(signal, ASSET, price)
-            st.markdown(f"<p style='font-size: 14px; color: green;'>✅ **Trade Executed:** {signal} at ${price} for {ASSET}</p>", unsafe_allow_html=True)
-            send_telegram_message(f"✅ Trade Executed: {signal} at ${price} for {ASSET}")
-            if 'no_signal_info_displayed' in st.session_state:
-                st.session_state.no_signal_info_displayed = False
+        open_positions = get_open_positions()
+        if len(open_positions) < 5:  # Check if the number of open positions is less than 5
+            price = market_data.get("snapshot", {}).get("offer", "N/A")
+            if price != "N/A":
+                place_trade(signal, ASSET, price)
+                st.markdown(f"<p style='font-size: 14px; color: green;'>✅ **Trade Executed:** {signal} at ${price} for {ASSET}</p>", unsafe_allow_html=True)
+                send_telegram_message(f"✅ Trade Executed: {signal} at ${price} for {ASSET}")
+                if 'no_signal_info_displayed' in st.session_state:
+                    st.session_state.no_signal_info_displayed = False
+            else:
+                if 'price_warning_displayed' not in st.session_state or not st.session_state.price_warning_displayed:
+                    st.markdown(f"<p style='font-size: 14px; color: red;'>⚠️ No valid price for {ASSET}.</p>", unsafe_allow_html=True)
+                    st.session_state.price_warning_displayed = True
         else:
-            if 'price_warning_displayed' not in st.session_state or not st.session_state.price_warning_displayed:
-                st.markdown(f"<p style='font-size: 14px; color: red;'>⚠️ No valid price for {ASSET}.</p>", unsafe_allow_html=True)
-                st.session_state.price_warning_displayed = True
+            st.markdown("<p style='font-size: 14px; color: orange;'>⚠️ **Max Open Positions Reached. No new trades will be placed.**</p>", unsafe_allow_html=True)
     else:
         if 'no_signal_info_displayed' not in st.session_state or not st.session_state.no_signal_info_displayed:
             st.markdown("<p style='font-size: 14px; color: orange;'>📉 **No Trade Signal Generated**</p>", unsafe_allow_html=True)
             st.session_state.no_signal_info_displayed = True
+
 
     # Increment the loop count
     st.session_state.loop_count += 1
@@ -336,6 +404,9 @@ def run_dashboard():
 if __name__ == "__main__":
     if authenticate():
         while True:
-            run_dashboard()
-            logging.info("***** LOOP THE SCRIPT *****")
+            try:
+                run_dashboard()
+                logging.info("***** LOOP THE SCRIPT *****")
+            except Exception as e:
+                logging.error(f"❌ Exception occurred in main loop: {e}")
             time.sleep(30)  # Loop every 30 seconds
