@@ -200,7 +200,7 @@ def generate_signal(indicators):
         close = indicators["close"]
         if rsi < 30 and ema > close:  # Buy signal
             return 'BUY'
-        elif rsi > 70 and ema < close:  # Sell signal
+        elif rsi > 60 and ema < close:  # Sell signal
             return 'SELL'
     return None
 
