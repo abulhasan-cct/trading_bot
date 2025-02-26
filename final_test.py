@@ -70,7 +70,6 @@ def authenticate():
         st.session_state.initial_message_sent = True
     return True
 
-
 # 📌 FETCH MARKET DATA
 def get_market_data(epic):
     conn = http.client.HTTPSConnection(BASE_URL)
@@ -102,12 +101,13 @@ def get_historical_prices(epic, resolution='MINUTE_15', max_points=1000, from_da
         logging.error(f"❌ Error fetching historical prices for {epic}: {data}")
         return None
     
-    # logging.info(f"✅ Historical data fetched for {epic}: {data}")
     return data
 
-# 📌 CALCULATE TECHNICAL INDICATORS (RSI, EMA, MACD)
+# 📌 CALCULATE TECHNICAL INDICATORS (RSI, EMA)
 def calculate_indicators(epic):
     historical_data = get_historical_prices(epic)
+    if not historical_data:
+        return None
     candles = historical_data.get("prices", [])
     
     if len(candles) < 100:  # Ensure there are enough data points
@@ -120,33 +120,22 @@ def calculate_indicators(epic):
 
     # Compute Indicators
     df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
-    df['ema5'] = ta.trend.EMAIndicator(df['close'], window=5).ema_indicator()
-    df['ema20'] = ta.trend.EMAIndicator(df['close'], window=20).ema_indicator()
-
-    macd = ta.trend.MACD(df['close'], window_slow=26, window_fast=12, window_sign=9)
-    df['macd'] = macd.macd()
-    df['macd_signal'] = macd.macd_signal()
+    df['ema'] = ta.trend.EMAIndicator(df['close'], window=20).ema_indicator()
 
     # Get the latest values and handle NaN cases
     return {
         "RSI": df['rsi'].iloc[-1] if not pd.isna(df['rsi'].iloc[-1]) else None,
-        "EMA5": df['ema5'].iloc[-1] if not pd.isna(df['ema5'].iloc[-1]) else None,
-        "EMA20": df['ema20'].iloc[-1] if not pd.isna(df['ema20'].iloc[-1]) else None,
-        "MACD": df['macd'].iloc[-1] if not pd.isna(df['macd'].iloc[-1]) else None,
-        "MACD_Signal": df['macd_signal'].iloc[-1] if not pd.isna(df['macd_signal'].iloc[-1]) else None
+        "EMA": df['ema'].iloc[-1] if not pd.isna(df['ema'].iloc[-1]) else None
     }
 
 # 📌 GENERATE TRADE SIGNAL
 def generate_signal(indicators):
     if indicators:
         rsi = indicators["RSI"]
-        ema5 = indicators["EMA5"]
-        ema20 = indicators["EMA20"]
-        macd = indicators["MACD"]
-        macd_signal = indicators["MACD_Signal"]
-        if rsi < 40 and ema5 > ema20 and macd > macd_signal:
+        ema = indicators["EMA"]
+        if rsi < 30 and ema > df['close'].iloc[-1]:  # Buy signal
             return 'BUY'
-        elif rsi > 60 and ema5 < ema20 and macd < macd_signal:
+        elif rsi > 70 and ema < df['close'].iloc[-1]:  # Sell signal
             return 'SELL'
     return None
 
@@ -219,7 +208,7 @@ def get_wallet_balance():
 
 # 📌 STREAMLIT DASHBOARD
 def run_dashboard():
-   # Check if the title and subtitle have already been displayed
+    # Check if the title and subtitle have already been displayed
     if 'displayed_title' not in st.session_state:
         st.title("📈 Trading Bot Dashboard")
         st.subheader("📊 Live Market Data, Technical Indicators & Trade Execution")
@@ -303,16 +292,21 @@ def run_dashboard():
                 close_position(deal_id)
                 st.markdown(f"<p style='font-size: 14px; color: green;'>✅ **Position Closed:** {epic} - {direction} {upl}</p>", unsafe_allow_html=True)
 
-  # 📌 Display Current Calculated Indicators
-    if indicators and 'indicators_displayed' not in st.session_state:
-        st.markdown("<h3 style='font-size: 16px;'>📈 Current Calculated Indicators</h3>", unsafe_allow_html=True)
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.markdown(f"<p style='font-size: 14px;'>RSI: {indicators['RSI'] if indicators['RSI'] is not None else 'N/A'}</p>", unsafe_allow_html=True)
-        col2.markdown(f"<p style='font-size: 14px;'>EMA5: {indicators['EMA5'] if indicators['EMA5'] is not None else 'N/A'}</p>", unsafe_allow_html=True)
-        col3.markdown(f"<p style='font-size: 14px;'>EMA20: {indicators['EMA20'] if indicators['EMA20'] is not None else 'N/A'}</p>", unsafe_allow_html=True)
-        col4.markdown(f"<p style='font-size: 14px;'>MACD: {indicators['MACD'] if indicators['MACD'] is not None else 'N/A'}</p>", unsafe_allow_html=True)
-        col5.markdown(f"<p style='font-size: 14px;'>MACD Signal: {indicators['MACD_Signal'] if indicators['MACD_Signal'] is not None else 'N/A'}</p>", unsafe_allow_html=True)
-        st.session_state.indicators_displayed = True
+    # 📌 Display Current Calculated Indicators
+    if indicators:
+        # Check if the indicators for this asset have already been displayed
+        if f"indicators_displayed_{ASSET}" not in st.session_state:
+            # Display indicators for the first time
+            st.markdown(f"<h3 style='font-size: 16px;'>📈 Current Calculated Indicators for {ASSET}</h3>", unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            st.session_state[f"indicators_displayed_{ASSET}"] = {
+                "col1": col1.empty(),
+                "col2": col2.empty(),
+            }
+        
+        # Update the indicators in place
+        st.session_state[f"indicators_displayed_{ASSET}"]["col1"].markdown(f"<p style='font-size: 14px;'>RSI: {indicators['RSI'] if indicators['RSI'] is not None else 'N/A'}</p>", unsafe_allow_html=True)
+        st.session_state[f"indicators_displayed_{ASSET}"]["col2"].markdown(f"<p style='font-size: 14px;'>EMA: {indicators['EMA'] if indicators['EMA'] is not None else 'N/A'}</p>", unsafe_allow_html=True)
 
     # Generate and Execute Trade Signal
     if signal:
@@ -341,10 +335,4 @@ if __name__ == "__main__":
         while True:
             run_dashboard()
             logging.info("***** LOOP THE SCRIPT *****")
-            time.sleep(30)  # Loop every 120 seconds
-
-
-# IN THIS SCRIPT WE SET THE RSI CALCULATION AND TAKE PROSIT CLOSE POSITION INTO SAMLL VALUE
-
-# RSI= 51
-# CLOSE PSOITION= 5 TIME PROFIT IF WE BUY FROM 1 STOCK
+            time.sleep(30)  # Loop every 30 seconds
