@@ -341,7 +341,7 @@ if __name__ == "__main__":
         while True:
             run_dashboard()
             logging.info("***** LOOP THE SCRIPT *****")
-            time.sleep(60)  # Loop every 120 seconds
+            time.sleep(30)  # Loop every 120 seconds
 
 
 # IN THIS SCRIPT WE SET THE RSI CALCULATION AND TAKE PROSIT CLOSE POSITION INTO SAMLL VALUE
