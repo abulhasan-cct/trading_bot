@@ -133,9 +133,9 @@ def generate_signal(indicators):
     if indicators:
         rsi = indicators["RSI"]
         ema = indicators["EMA"]
-        if rsi < 30 and ema > df['close'].iloc[-1]:  # Buy signal
+        if rsi < 40 and ema > df['close'].iloc[-1]:  # Buy signal
             return 'BUY'
-        elif rsi > 70 and ema < df['close'].iloc[-1]:  # Sell signal
+        elif rsi > 60 and ema < df['close'].iloc[-1]:  # Sell signal
             return 'SELL'
     return None
 
