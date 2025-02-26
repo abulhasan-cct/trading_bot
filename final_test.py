@@ -125,7 +125,8 @@ def calculate_indicators(epic):
     # Get the latest values and handle NaN cases
     return {
         "RSI": df['rsi'].iloc[-1] if not pd.isna(df['rsi'].iloc[-1]) else None,
-        "EMA": df['ema'].iloc[-1] if not pd.isna(df['ema'].iloc[-1]) else None
+        "EMA": df['ema'].iloc[-1] if not pd.isna(df['ema'].iloc[-1]) else None,
+        "close": df['close'].iloc[-1] if not pd.isna(df['close'].iloc[-1]) else None
     }
 
 # 📌 GENERATE TRADE SIGNAL
@@ -133,9 +134,10 @@ def generate_signal(indicators):
     if indicators:
         rsi = indicators["RSI"]
         ema = indicators["EMA"]
-        if rsi < 40 and ema > df['close'].iloc[-1]:  # Buy signal
+        close = indicators["close"]
+        if rsi < 40 and ema > close:  # Buy signal
             return 'BUY'
-        elif rsi > 60 and ema < df['close'].iloc[-1]:  # Sell signal
+        elif rsi > 60 and ema < close:  # Sell signal
             return 'SELL'
     return None
 
