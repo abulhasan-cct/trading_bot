@@ -19,7 +19,7 @@ BASE_URL = "demo-api-capital.backend-capital.com"  # Corrected URL
 TRADE_AMOUNT = 1  # Trade size
 RISK_PERCENTAGE = 1  # Stop-loss percentage
 TP_MULTIPLIER = 3  # Take-profit multiplier
-ASSET = "GOLD"  # Single asset to trade
+ASSET = "AAPL"  # Single asset to trade
 
 # Global variables for authentication
 security_token, cst_token = None, None
