@@ -233,49 +233,52 @@ def run_dashboard():
     signal = generate_signal(indicators)
 
     # 📌 Fetch Wallet Balance
-    if 'wallet_balance_displayed' not in st.session_state:
-        balances = get_wallet_balance()
-        st.markdown("<h3 style='font-size: 16px;'>💰 Wallet Balances</h3>", unsafe_allow_html=True)
-        col1, col2, col3, col4 = st.columns(4)
-        for account in balances.get("accounts", []):
-            account_name = account.get("accountName", "Unknown")
-            currency = account.get("currency", "Unknown")
-            symbol = account.get("symbol", "")
-            balance = account.get("balance", {}).get("balance", 0)
-            deposit = account.get("balance", {}).get("deposit", 0)
-            profit_loss = account.get("balance", {}).get("profitLoss", 0)
-            available = account.get("balance", {}).get("available", 0)
+if 'wallet_balance_displayed' not in st.session_state:
+    balances = get_wallet_balance()
+    st.markdown("<h3 style='font-size: 16px;'>💰 Wallet Balances</h3>", unsafe_allow_html=True)
+    st.session_state.wallet_balance_displayed = st.empty()
 
-            col1.markdown(f"<p style='font-size: 14px;'>Balance ({account_name}): {symbol}{balance}</p>", unsafe_allow_html=True)
-            col2.markdown(f"<p style='font-size: 14px;'>Deposit ({account_name}): {symbol}{deposit}</p>", unsafe_allow_html=True)
-            col3.markdown(f"<p style='font-size: 14px;'>Profit/Loss ({account_name}): {symbol}{profit_loss}</p>", unsafe_allow_html=True)
-            col4.markdown(f"<p style='font-size: 14px;'>Available ({account_name}): {symbol}{available}</p>", unsafe_allow_html=True)
-        st.session_state.wallet_balance_displayed = True
+# Update wallet balance in each loop
+balances = get_wallet_balance()
+if balances:
+    balance_table = "<table style='font-size: 14px;'><tr><th>Account</th><th>Balance</th><th>Deposit</th><th>Profit/Loss</th><th>Available</th></tr>"
+    for account in balances.get("accounts", []):
+        account_name = account.get("accountName", "Unknown")
+        currency = account.get("currency", "Unknown")
+        symbol = account.get("symbol", "")
+        balance = account.get("balance", {}).get("balance", 0)
+        deposit = account.get("balance", {}).get("deposit", 0)
+        profit_loss = account.get("balance", {}).get("profitLoss", 0)
+        available = account.get("balance", {}).get("available", 0)
+        balance_table += f"<tr><td>{account_name}</td><td>{symbol}{balance}</td><td>{symbol}{deposit}</td><td>{symbol}{profit_loss}</td><td>{symbol}{available}</td></tr>"
+    balance_table += "</table>"
+    st.session_state.wallet_balance_displayed.markdown(balance_table, unsafe_allow_html=True)
 
     # 📌 Fetch and Display Open Positions
-    if 'open_positions_displayed' not in st.session_state:
-        open_positions = get_open_positions()
-        st.markdown("<h3 style='font-size: 16px;'>📊 Open Positions</h3>", unsafe_allow_html=True)
-        if open_positions:
-            col1, col2, col3, col4 = st.columns(4)
-            for position in open_positions:
-                market = position.get("market", {})
-                position_info = position.get("position", {})
-                epic = market.get("epic", "Unknown")
-                instrument_name = market.get("instrumentName", "Unknown")
-                direction = position_info.get("direction", "Unknown")
-                size = position_info.get("size", 0)
-                level = position_info.get("level", 0)
-                upl = position_info.get("upl", 0)
-                created_date = position_info.get("createdDate", "Unknown")
+if 'open_positions_displayed' not in st.session_state:
+    open_positions = get_open_positions()
+    st.markdown("<h3 style='font-size: 16px;'>📊 Open Positions</h3>", unsafe_allow_html=True)
+    st.session_state.open_positions_displayed = st.empty()
 
-                col1.markdown(f"<p style='font-size: 14px;'>Position: {instrument_name} ({epic}) - {direction} {size} @ {level}</p>", unsafe_allow_html=True)
-                col2.markdown(f"<p style='font-size: 14px;'>Unrealized P/L: ${upl}</p>", unsafe_allow_html=True)
-                col3.markdown(f"<p style='font-size: 14px;'>Created Date: {created_date}</p>", unsafe_allow_html=True)
-                col4.markdown(f"<p style='font-size: 14px;'>Instrument: {instrument_name}</p>", unsafe_allow_html=True)
-        else:
-            st.markdown("<p style='font-size: 14px;'>No open positions.</p>", unsafe_allow_html=True)
-        st.session_state.open_positions_displayed = True
+# Update open positions in each loop
+open_positions = get_open_positions()
+if open_positions:
+    positions_table = "<table style='font-size: 14px;'><tr><th>Position</th><th>Unrealized P/L</th><th>Created Date</th><th>Instrument</th></tr>"
+    for position in open_positions:
+        market = position.get("market", {})
+        position_info = position.get("position", {})
+        epic = market.get("epic", "Unknown")
+        instrument_name = market.get("instrumentName", "Unknown")
+        direction = position_info.get("direction", "Unknown")
+        size = position_info.get("size", 0)
+        level = position_info.get("level", 0)
+        upl = position_info.get("upl", 0)
+        created_date = position_info.get("createdDate", "Unknown")
+        positions_table += f"<tr><td>{instrument_name} ({epic}) - {direction} {size} @ {level}</td><td>${upl}</td><td>{created_date}</td><td>{instrument_name}</td></tr>"
+    positions_table += "</table>"
+    st.session_state.open_positions_displayed.markdown(positions_table, unsafe_allow_html=True)
+else:
+    st.session_state.open_positions_displayed.markdown("<p style='font-size: 14px;'>No open positions.</p>", unsafe_allow_html=True)
 
     # 📌 Close Open Positions if Necessary
     open_positions = get_open_positions()
