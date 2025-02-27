@@ -32,14 +32,13 @@ def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     data = {"chat_id": CHAT_ID, "text": message}
     try:
-        response = requests.post(url, data=data)
+        response = requests.post(url, json=data)
         if response.status_code == 200:
             logging.info(f"📩 Telegram message sent: {message}")
         else:
-            logging.error(f"⚠️ Failed to send Telegram message: {response.status_code}")
+            logging.error(f"⚠️ Failed to send Telegram message: {response.status_code} - {response.text}")
     except Exception as e:
         logging.error(f"⚠️ Error while sending Telegram message: {e}")
-
 
 # 📌 AUTHENTICATION FUNCTION
 def authenticate():
@@ -71,7 +70,6 @@ def authenticate():
         st.session_state.initial_message_sent = True
     return True
 
-
 # 📌 FETCH MARKET DATA
 def get_market_data(epic):
     conn = http.client.HTTPSConnection(BASE_URL)
@@ -82,6 +80,7 @@ def get_market_data(epic):
     if "errorCode" in data:
         logging.error(f"❌ Error fetching market data for {epic}: {data}")
     return data
+
 # 📌 FETCH HISTORICAL PRICES
 def get_historical_prices(
     epic,
@@ -182,7 +181,6 @@ def calculate_indicators(epic):
 
     return indicators
 
-
 # 📌 GENERATE TRADE SIGNAL
 def generate_signal(indicators):
     if indicators:
@@ -207,7 +205,6 @@ def generate_signal(indicators):
             logging.info("No signal generated")
     return None
 
-
 # 📌 FETCH OPEN POSITIONS
 def get_open_positions():
     conn = http.client.HTTPSConnection(BASE_URL)
@@ -216,7 +213,6 @@ def get_open_positions():
     res = conn.getresponse()
     data = json.loads(res.read().decode("utf-8"))
     return data.get("positions", [])
-
 
 # 📌 CLOSE POSITION FUNCTION
 def close_position(deal_id):
@@ -235,7 +231,6 @@ def close_position(deal_id):
     logging.info(f"✅ Position closed successfully for dealId {deal_id}: {response}")
     send_telegram_message(f"✅ Position closed successfully for dealId {deal_id}")
     return True
-
 
 # 📌 EXECUTE TRADE
 def place_trade(signal, epic, price):
@@ -281,7 +276,6 @@ def place_trade(signal, epic, price):
     )
     return data
 
-
 # 📌 FETCH WALLET BALANCE
 def get_wallet_balance():
     conn = http.client.HTTPSConnection(BASE_URL)
@@ -291,26 +285,40 @@ def get_wallet_balance():
     data = json.loads(res.read().decode("utf-8"))
     return data  # Return the full JSON response
 
-
 # 📌 STREAMLIT DASHBOARD
 def run_dashboard():
-    # Check if the title and subtitle have already been displayed
+    # Initialize session state variables if they don't exist
     if "displayed_title" not in st.session_state:
-        st.title("📈 Trading Bot Dashboard")
-        st.subheader("📊 Live Market Data, Technical Indicators & Trade Execution")
-        st.session_state.displayed_title = (
-            True  # Set flag to indicate title has been displayed
-        )
-
-    # Use session state to track the loop count
+        st.session_state.displayed_title = False
     if "loop_count" not in st.session_state:
         st.session_state.loop_count = 0
-
-    # Placeholder for loop count
     if "loop_count_placeholder" not in st.session_state:
         st.session_state.loop_count_placeholder = st.empty()
+    if "wallet_balance_displayed" not in st.session_state:
+        st.session_state.wallet_balance_displayed = st.empty()
+    if "open_positions_displayed" not in st.session_state:
+        st.session_state.open_positions_displayed = st.empty()
+    if "indicators_displayed_AAPL" not in st.session_state:
+        st.session_state["indicators_displayed_AAPL"] = {
+            "col1": st.empty(),
+            "col2": st.empty(),
+            "col3": st.empty(),
+            "col4": st.empty(),
+        }
+    if "no_signal_info_displayed" not in st.session_state:
+        st.session_state.no_signal_info_displayed = False
+    if "price_warning_displayed" not in st.session_state:
+        st.session_state.price_warning_displayed = False
+    if "max_positions_message_displayed" not in st.session_state:
+        st.session_state.max_positions_message_displayed = False
 
-    # Update loop count in the UI
+    # Check if the title and subtitle have already been displayed
+    if not st.session_state.displayed_title:
+        st.title("📈 Trading Bot Dashboard")
+        st.subheader("📊 Live Market Data, Technical Indicators & Trade Execution")
+        st.session_state.displayed_title = True
+
+    # Use session state to track the loop count
     st.session_state.loop_count_placeholder.markdown(
         f"🔄 **Loop Count:** {st.session_state.loop_count}"
     )
@@ -321,14 +329,6 @@ def run_dashboard():
     signal = generate_signal(indicators)
 
     # 📌 Fetch Wallet Balance
-    if "wallet_balance_displayed" not in st.session_state:
-        balances = get_wallet_balance()
-        st.markdown(
-            "<h3 style='font-size: 16px;'>💰 Wallet Balances</h3>",
-            unsafe_allow_html=True,
-        )
-        st.session_state.wallet_balance_displayed = st.empty()
-
     balances = get_wallet_balance()
     if balances:
         balance_table = "<table style='font-size: 14px;'><tr><th>Account</th><th>Balance</th><th>Deposit</th><th>Profit/Loss</th><th>Available</th></tr>"
@@ -347,13 +347,6 @@ def run_dashboard():
         )
 
     # 📌 Fetch and Display Open Positions
-    if "open_positions_displayed" not in st.session_state:
-        open_positions = get_open_positions()
-        st.markdown(
-            "<h3 style='font-size: 16px;'>📊 Open Positions</h3>", unsafe_allow_html=True
-        )
-        st.session_state.open_positions_displayed = st.empty()
-
     open_positions = get_open_positions()
     if open_positions:
         positions_table = "<table style='font-size: 14px;'><tr><th>Position</th><th>Unrealized P/L</th><th>Created Date</th><th>Instrument</th></tr>"
@@ -378,7 +371,6 @@ def run_dashboard():
         )
 
     # 📌 Close Open Positions if Necessary
-    open_positions = get_open_positions()
     for position in open_positions:
         market = position.get("market", {})
         position_info = position.get("position", {})
@@ -396,41 +388,25 @@ def run_dashboard():
                     f"<p style='font-size: 14px; color: green;'>✅ **Position Closed:** {epic} - {direction} {upl}</p>",
                     unsafe_allow_html=True,
                 )
-                # Reset the max positions message flag
                 if "max_positions_message_displayed" in st.session_state:
                     del st.session_state.max_positions_message_displayed
 
     # 📌 Display Current Calculated Indicators
     if indicators:
-        # Check if the indicators for this asset have already been displayed
-        if f"indicators_displayed_{ASSET}" not in st.session_state:
-            # Display indicators for the first time
-            st.markdown(
-                f"<h3 style='font-size: 16px;'>📈 Current Calculated Indicators for {ASSET}</h3>",
-                unsafe_allow_html=True,
-            )
-            col1, col2, col3, col4 = st.columns(4)
-            st.session_state[f"indicators_displayed_{ASSET}"] = {
-                "col1": col1.empty(),
-                "col2": col2.empty(),
-                "col3": col3.empty(),
-                "col4": col4.empty(),
-            }
-
-        # Update the indicators in place
-        st.session_state[f"indicators_displayed_{ASSET}"]["col1"].markdown(
+        col1, col2, col3, col4 = st.columns(4)
+        col1.markdown(
             f"<p style='font-size: 14px;'>EMA 9: {indicators['EMA_9'] if indicators['EMA_9'] is not None else 'N/A'}</p>",
             unsafe_allow_html=True,
         )
-        st.session_state[f"indicators_displayed_{ASSET}"]["col2"].markdown(
+        col2.markdown(
             f"<p style='font-size: 14px;'>EMA 21: {indicators['EMA_21'] if indicators['EMA_21'] is not None else 'N/A'}</p>",
             unsafe_allow_html=True,
         )
-        st.session_state[f"indicators_displayed_{ASSET}"]["col3"].markdown(
+        col3.markdown(
             f"<p style='font-size: 14px;'>RSI: {indicators['RSI'] if indicators['RSI'] is not None else 'N/A'}</p>",
             unsafe_allow_html=True,
         )
-        st.session_state[f"indicators_displayed_{ASSET}"]["col4"].markdown(
+        col4.markdown(
             f"<p style='font-size: 14px;'>VWAP: {indicators['VWAP'] if indicators['VWAP'] is not None else 'N/A'}</p>",
             unsafe_allow_html=True,
         )
@@ -447,38 +423,31 @@ def run_dashboard():
                     unsafe_allow_html=True,
                 )
                 send_telegram_message(f"✅ Trade Executed: {signal} at ${price} for {ASSET}")
-                if "no_signal_info_displayed" in st.session_state:
-                    st.session_state.no_signal_info_displayed = False
+                st.session_state.no_signal_info_displayed = False
             else:
-                if (
-                    "price_warning_displayed" not in st.session_state
-                    or not st.session_state.price_warning_displayed
-                ):
+                if not st.session_state.price_warning_displayed:
                     st.markdown(
                         f"<p style='font-size: 14px; color: red;'>⚠️ No valid price for {ASSET}.</p>",
                         unsafe_allow_html=True,
                     )
                     st.session_state.price_warning_displayed = True
         else:
-            if "max_positions_message_displayed" not in st.session_state:
+            if not st.session_state.max_positions_message_displayed:
                 st.markdown(
                     "<p style='font-size: 14px; color: orange;'>⚠️ **Max Open Positions Reached. No new trades will be placed.**</p>",
                     unsafe_allow_html=True,
                 )
                 st.session_state.max_positions_message_displayed = True
     else:
-        if (
-            "no_signal_info_displayed" not in st.session_state
-            or not st.session_state.no_signal_info_displayed
-        ):
+        if not st.session_state.no_signal_info_displayed:
             st.markdown(
                 "<p style='font-size: 14px; color: orange;'>📉 **No Trade Signal Generated**</p>",
                 unsafe_allow_html=True,
             )
             st.session_state.no_signal_info_displayed = True
 
-        # Increment the loop count
-        st.session_state.loop_count += 1
+    # Increment the loop count
+    st.session_state.loop_count += 1
 
 # 📌 MAIN LOOP
 if __name__ == "__main__":
