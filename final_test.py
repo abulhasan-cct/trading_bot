@@ -132,7 +132,7 @@ def get_market_data(epic):
 #     }
 
 # 📌 FETCH HISTORICAL PRICES
-def get_historical_prices(epic, resolution='MINUTE_15', max_points=1000, from_date=None, to_date=None):
+def get_historical_prices(epic, resolution='MINUTE_15', max_points=1000, from_date=None, to_date=None, retries=3, delay=5):
     conn = http.client.HTTPSConnection(BASE_URL)
     headers = {'X-SECURITY-TOKEN': security_token, 'CST': cst_token}
     
@@ -143,28 +143,37 @@ def get_historical_prices(epic, resolution='MINUTE_15', max_points=1000, from_da
     if to_date:
         query += f"&to={to_date.isoformat()}"
     
-    try:
-        conn.request("GET", query, headers=headers)
-        res = conn.getresponse()
-        data = res.read().decode("utf-8")
-        
-        if res.status != 200:
-            logging.error(f"❌ Error fetching historical prices for {epic}: HTTP {res.status} - {data}")
-            return None
-        
-        data = json.loads(data)
-        
-        if "errorCode" in data:
-            logging.error(f"❌ Error fetching historical prices for {epic}: {data}")
-            return None
-        
-        return data
-    except json.JSONDecodeError as e:
-        logging.error(f"❌ JSON Decode Error: {e}")
-        return None
-    except Exception as e:
-        logging.error(f"❌ Exception occurred while fetching historical prices for {epic}: {e}")
-        return None
+    attempt = 0
+    while attempt < retries:
+        try:
+            conn.request("GET", query, headers=headers)
+            res = conn.getresponse()
+            data = res.read().decode("utf-8")
+            
+            if res.status != 200:
+                logging.error(f"❌ Error fetching historical prices for {epic}: HTTP {res.status} - {data}")
+                if attempt < retries - 1:
+                    logging.info(f"Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                attempt += 1
+                continue
+            
+            data = json.loads(data)
+            
+            if "errorCode" in data:
+                logging.error(f"❌ Error fetching historical prices for {epic}: {data}")
+                return None
+            
+            return data
+        except json.JSONDecodeError as e:
+            logging.error(f"❌ JSON Decode Error: {e}")
+        except Exception as e:
+            logging.error(f"❌ Exception occurred while fetching historical prices for {epic}: {e}")
+        if attempt < retries - 1:
+            logging.info(f"Retrying in {delay} seconds...")
+            time.sleep(delay)
+        attempt += 1
+    return None
         
 # 📌 CALCULATE TECHNICAL INDICATORS (RSI, EMA)
 def calculate_indicators(epic):
