@@ -82,7 +82,61 @@ def get_market_data(epic):
     if "errorCode" in data:
         logging.error(f"❌ Error fetching market data for {epic}: {data}")
     return data
+# 📌 FETCH HISTORICAL PRICES
+def get_historical_prices(
+    epic,
+    resolution="MINUTE_15",
+    max_points=1000,
+    from_date=None,
+    to_date=None,
+    retries=3,
+    delay=5,
+):
+    conn = http.client.HTTPSConnection(BASE_URL)
+    headers = {"X-SECURITY-TOKEN": security_token, "CST": cst_token}
 
+    query = f"/api/v1/prices/{epic}?resolution={resolution}&max={max_points}"
+
+    if from_date:
+        query += f"&from={from_date.isoformat()}"
+    if to_date:
+        query += f"&to={to_date.isoformat()}"
+
+    attempt = 0
+    while attempt < retries:
+        try:
+            conn.request("GET", query, headers=headers)
+            res = conn.getresponse()
+            data = res.read().decode("utf-8")
+
+            if res.status != 200:
+                logging.error(
+                    f"❌ Error fetching historical prices for {epic}: HTTP {res.status} - {data}"
+                )
+                if attempt < retries - 1:
+                    logging.info(f"Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                attempt += 1
+                continue
+
+            data = json.loads(data)
+
+            if "errorCode" in data:
+                logging.error(f"❌ Error fetching historical prices for {epic}: {data}")
+                return None
+
+            return data
+        except json.JSONDecodeError as e:
+            logging.error(f"❌ JSON Decode Error: {e}")
+        except Exception as e:
+            logging.error(
+                f"❌ Exception occurred while fetching historical prices for {epic}: {e}"
+            )
+        if attempt < retries - 1:
+            logging.info(f"Retrying in {delay} seconds...")
+            time.sleep(delay)
+        attempt += 1
+    return None
 
 # 📌 CALCULATE TECHNICAL INDICATORS (EMA, RSI, VWAP)
 def calculate_indicators(epic):
@@ -127,46 +181,6 @@ def calculate_indicators(epic):
     logging.info(f"Calculated indicators: {indicators}")
 
     return indicators
-
-
-# 📌 CALCULATE TECHNICAL INDICATORS (EMA, RSI, VWAP)
-def calculate_indicators(epic):
-    historical_data = get_historical_prices(epic)
-    if not historical_data:
-        return None
-    candles = historical_data.get("prices", [])
-
-    if len(candles) < 100:  # Ensure there are enough data points
-        logging.warning(f"Insufficient historical data points: {len(candles)}")
-        return None
-
-    # Convert to DataFrame
-    df = pd.DataFrame(candles)
-    df["close"] = df["closePrice"].apply(
-        lambda x: float(x["ask"])
-    )  # Extract close price
-    df["volume"] = df["lastTradedVolume"].astype(float)  # Extract volume
-
-    # Compute Indicators
-    df["ema_9"] = ta.trend.EMAIndicator(df["close"], window=9).ema_indicator()
-    df["ema_21"] = ta.trend.EMAIndicator(df["close"], window=21).ema_indicator()
-    df["rsi"] = ta.momentum.RSIIndicator(df["close"], window=14).rsi()
-    df["vwap"] = ta.volume.VolumeWeightedAveragePrice(
-        high=df["highPrice"].apply(lambda x: float(x["ask"])),
-        low=df["lowPrice"].apply(lambda x: float(x["ask"])),
-        close=df["close"],
-        volume=df["volume"],
-        window=14,
-    ).volume_weighted_average_price()
-
-    # Get the latest values and handle NaN cases
-    return {
-        "EMA_9": df["ema_9"].iloc[-1] if not pd.isna(df["ema_9"].iloc[-1]) else None,
-        "EMA_21": df["ema_21"].iloc[-1] if not pd.isna(df["ema_21"].iloc[-1]) else None,
-        "RSI": df["rsi"].iloc[-1] if not pd.isna(df["rsi"].iloc[-1]) else None,
-        "VWAP": df["vwap"].iloc[-1] if not pd.isna(df["vwap"].iloc[-1]) else None,
-        "close": df["close"].iloc[-1] if not pd.isna(df["close"].iloc[-1]) else None,
-    }
 
 
 # 📌 GENERATE TRADE SIGNAL
