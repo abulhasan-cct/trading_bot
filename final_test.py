@@ -137,6 +137,36 @@ def get_historical_prices(
         attempt += 1
     return None
 
+# 📌 Display Current Calculated Indicators
+def display_indicators(indicators):
+    if indicators:
+        # Check if the indicators have already been displayed
+        if "indicators_displayed" not in st.session_state:
+            st.session_state.indicators_displayed = {
+                "col1": st.empty(),
+                "col2": st.empty(),
+                "col3": st.empty(),
+                "col4": st.empty(),
+            }
+
+        # Update the indicators in place
+        st.session_state.indicators_displayed["col1"].markdown(
+            f"<p style='font-size: 14px;'>EMA 9: {indicators['EMA_9'] if indicators['EMA_9'] is not None else 'N/A'}</p>",
+            unsafe_allow_html=True,
+        )
+        st.session_state.indicators_displayed["col2"].markdown(
+            f"<p style='font-size: 14px;'>EMA 21: {indicators['EMA_21'] if indicators['EMA_21'] is not None else 'N/A'}</p>",
+            unsafe_allow_html=True,
+        )
+        st.session_state.indicators_displayed["col3"].markdown(
+            f"<p style='font-size: 14px;'>RSI: {indicators['RSI'] if indicators['RSI'] is not None else 'N/A'}</p>",
+            unsafe_allow_html=True,
+        )
+        st.session_state.indicators_displayed["col4"].markdown(
+            f"<p style='font-size: 14px;'>VWAP: {indicators['VWAP'] if indicators['VWAP'] is not None else 'N/A'}</p>",
+            unsafe_allow_html=True,
+        )
+
 # 📌 CALCULATE TECHNICAL INDICATORS (EMA, RSI, VWAP)
 def calculate_indicators(epic):
     historical_data = get_historical_prices(epic)
@@ -298,8 +328,8 @@ def run_dashboard():
         st.session_state.wallet_balance_displayed = st.empty()
     if "open_positions_displayed" not in st.session_state:
         st.session_state.open_positions_displayed = st.empty()
-    if "indicators_displayed_AAPL" not in st.session_state:
-        st.session_state["indicators_displayed_AAPL"] = {
+    if "indicators_displayed" not in st.session_state:
+        st.session_state.indicators_displayed = {
             "col1": st.empty(),
             "col2": st.empty(),
             "col3": st.empty(),
@@ -392,24 +422,7 @@ def run_dashboard():
                     del st.session_state.max_positions_message_displayed
 
     # 📌 Display Current Calculated Indicators
-    if indicators:
-        col1, col2, col3, col4 = st.columns(4)
-        col1.markdown(
-            f"<p style='font-size: 14px;'>EMA 9: {indicators['EMA_9'] if indicators['EMA_9'] is not None else 'N/A'}</p>",
-            unsafe_allow_html=True,
-        )
-        col2.markdown(
-            f"<p style='font-size: 14px;'>EMA 21: {indicators['EMA_21'] if indicators['EMA_21'] is not None else 'N/A'}</p>",
-            unsafe_allow_html=True,
-        )
-        col3.markdown(
-            f"<p style='font-size: 14px;'>RSI: {indicators['RSI'] if indicators['RSI'] is not None else 'N/A'}</p>",
-            unsafe_allow_html=True,
-        )
-        col4.markdown(
-            f"<p style='font-size: 14px;'>VWAP: {indicators['VWAP'] if indicators['VWAP'] is not None else 'N/A'}</p>",
-            unsafe_allow_html=True,
-        )
+    display_indicators(indicators)
 
     # Generate and Execute Trade Signal
     if signal:
