@@ -84,55 +84,6 @@ def get_market_data(epic):
     return data
 
 
-# # 📌 FETCH HISTORICAL PRICES
-# def get_historical_prices(epic, resolution='MINUTE_15', max_points=1000, from_date=None, to_date=None):
-#     conn = http.client.HTTPSConnection(BASE_URL)
-#     headers = {'X-SECURITY-TOKEN': security_token, 'CST': cst_token}
-
-#     query = f"/api/v1/prices/{epic}?resolution={resolution}&max={max_points}"
-
-#     if from_date:
-#         query += f"&from={from_date.isoformat()}"
-#     if to_date:
-#         query += f"&to={to_date.isoformat()}"
-
-#     conn.request("GET", query, headers=headers)
-#     res = conn.getresponse()
-#     data = json.loads(res.read().decode("utf-8"))
-
-#     if "errorCode" in data:
-#         logging.error(f"❌ Error fetching historical prices for {epic}: {data}")
-#         return None
-
-#     return data
-
-
-# # 📌 CALCULATE TECHNICAL INDICATORS (RSI, EMA)
-# def calculate_indicators(epic):
-#     historical_data = get_historical_prices(epic)
-#     if not historical_data:
-#         return None
-#     candles = historical_data.get("prices", [])
-
-#     if len(candles) < 100:  # Ensure there are enough data points
-#         logging.warning(f"Insufficient historical data points: {len(candles)}")
-#         return None
-
-#     # Convert to DataFrame
-#     df = pd.DataFrame(candles)
-#     df['close'] = df['closePrice'].apply(lambda x: float(x['ask']))  # Extract close price
-
-#     # Compute Indicators
-#     df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
-#     df['ema'] = ta.trend.EMAIndicator(df['close'], window=20).ema_indicator()
-
-#     # Get the latest values and handle NaN cases
-#     return {
-#         "RSI": df['rsi'].iloc[-1] if not pd.isna(df['rsi'].iloc[-1]) else None,
-#         "EMA": df['ema'].iloc[-1] if not pd.isna(df['ema'].iloc[-1]) else None,
-#         "close": df['close'].iloc[-1] if not pd.isna(df['close'].iloc[-1]) else None
-#     }
-
 # 📌 FETCH HISTORICAL PRICES
 def get_historical_prices(
     epic,
@@ -190,7 +141,7 @@ def get_historical_prices(
     return None
 
 
-# 📌 CALCULATE TECHNICAL INDICATORS (RSI, EMA)
+# 📌 CALCULATE TECHNICAL INDICATORS (EMA, RSI, VWAP)
 def calculate_indicators(epic):
     historical_data = get_historical_prices(epic)
     if not historical_data:
@@ -206,15 +157,26 @@ def calculate_indicators(epic):
     df["close"] = df["closePrice"].apply(
         lambda x: float(x["ask"])
     )  # Extract close price
+    df["volume"] = df["lastTradedVolume"].astype(float)  # Extract volume
 
     # Compute Indicators
+    df["ema_9"] = ta.trend.EMAIndicator(df["close"], window=9).ema_indicator()
+    df["ema_21"] = ta.trend.EMAIndicator(df["close"], window=21).ema_indicator()
     df["rsi"] = ta.momentum.RSIIndicator(df["close"], window=14).rsi()
-    df["ema"] = ta.trend.EMAIndicator(df["close"], window=20).ema_indicator()
+    df["vwap"] = ta.volume.VolumeWeightedAveragePrice(
+        high=df["highPrice"].apply(lambda x: float(x["ask"])),
+        low=df["lowPrice"].apply(lambda x: float(x["ask"])),
+        close=df["close"],
+        volume=df["volume"],
+        window=14,
+    ).volume_weighted_average_price()
 
     # Get the latest values and handle NaN cases
     return {
+        "EMA_9": df["ema_9"].iloc[-1] if not pd.isna(df["ema_9"].iloc[-1]) else None,
+        "EMA_21": df["ema_21"].iloc[-1] if not pd.isna(df["ema_21"].iloc[-1]) else None,
         "RSI": df["rsi"].iloc[-1] if not pd.isna(df["rsi"].iloc[-1]) else None,
-        "EMA": df["ema"].iloc[-1] if not pd.isna(df["ema"].iloc[-1]) else None,
+        "VWAP": df["vwap"].iloc[-1] if not pd.isna(df["vwap"].iloc[-1]) else None,
         "close": df["close"].iloc[-1] if not pd.isna(df["close"].iloc[-1]) else None,
     }
 
@@ -222,12 +184,15 @@ def calculate_indicators(epic):
 # 📌 GENERATE TRADE SIGNAL
 def generate_signal(indicators):
     if indicators:
+        ema_9 = indicators["EMA_9"]
+        ema_21 = indicators["EMA_21"]
         rsi = indicators["RSI"]
-        ema = indicators["EMA"]
+        vwap = indicators["VWAP"]
         close = indicators["close"]
-        if rsi < 30 and ema > close:  # Buy signal
+
+        if ema_9 > ema_21 and rsi < 30 and close > vwap:  # Buy signal
             return "BUY"
-        elif rsi > 60 and ema < close:  # Sell signal
+        elif ema_9 < ema_21 and rsi > 70 and close < vwap:  # Sell signal
             return "SELL"
     return None
 
@@ -401,7 +366,6 @@ def run_dashboard():
             "<p style='font-size: 14px;'>No open positions.</p>", unsafe_allow_html=True
         )
 
-
     # 📌 Close Open Positions if Necessary
     open_positions = get_open_positions()
     for position in open_positions:
@@ -434,19 +398,29 @@ def run_dashboard():
                 f"<h3 style='font-size: 16px;'>📈 Current Calculated Indicators for {ASSET}</h3>",
                 unsafe_allow_html=True,
             )
-            col1, col2 = st.columns(2)
+            col1, col2, col3, col4 = st.columns(4)
             st.session_state[f"indicators_displayed_{ASSET}"] = {
                 "col1": col1.empty(),
                 "col2": col2.empty(),
+                "col3": col3.empty(),
+                "col4": col4.empty(),
             }
 
         # Update the indicators in place
         st.session_state[f"indicators_displayed_{ASSET}"]["col1"].markdown(
-            f"<p style='font-size: 14px;'>RSI: {indicators['RSI'] if indicators['RSI'] is not None else 'N/A'}</p>",
+            f"<p style='font-size: 14px;'>EMA 9: {indicators['EMA_9'] if indicators['EMA_9'] is not None else 'N/A'}</p>",
             unsafe_allow_html=True,
         )
         st.session_state[f"indicators_displayed_{ASSET}"]["col2"].markdown(
-            f"<p style='font-size: 14px;'>EMA: {indicators['EMA'] if indicators['EMA'] is not None else 'N/A'}</p>",
+            f"<p style='font-size: 14px;'>EMA 21: {indicators['EMA_21'] if indicators['EMA_21'] is not None else 'N/A'}</p>",
+            unsafe_allow_html=True,
+        )
+        st.session_state[f"indicators_displayed_{ASSET}"]["col3"].markdown(
+            f"<p style='font-size: 14px;'>RSI: {indicators['RSI'] if indicators['RSI'] is not None else 'N/A'}</p>",
+            unsafe_allow_html=True,
+        )
+        st.session_state[f"indicators_displayed_{ASSET}"]["col4"].markdown(
+            f"<p style='font-size: 14px;'>VWAP: {indicators['VWAP'] if indicators['VWAP'] is not None else 'N/A'}</p>",
             unsafe_allow_html=True,
         )
 
