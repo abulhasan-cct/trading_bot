@@ -8,6 +8,7 @@ import numpy as np
 import ta
 import pandas as pd
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
 
 # 📌 CONFIGURATION (API KEYS & SETTINGS)
 API_KEY = "6kF02pNz5ERlkKG5"
@@ -19,7 +20,7 @@ BASE_URL = "demo-api-capital.backend-capital.com"  # Corrected URL
 TRADE_AMOUNT = 1  # Trade size
 RISK_PERCENTAGE = 1  # Stop-loss percentage
 TP_MULTIPLIER = 3  # Take-profit multiplier
-ASSET = "AAPL"  # Single asset to trade
+ASSETS = ["AAPL", "GOOGL", "MSFT"]  # List of assets to trade
 
 # Global variables for authentication
 security_token, cst_token = None, None
@@ -137,35 +138,57 @@ def get_historical_prices(
         attempt += 1
     return None
 
-# 📌 Display Current Calculated Indicators
-def display_indicators(indicators):
-    if indicators:
-        # Check if the indicators have already been displayed
-        if "indicators_displayed" not in st.session_state:
-            st.session_state.indicators_displayed = {
-                "col1": st.empty(),
-                "col2": st.empty(),
-                "col3": st.empty(),
-                "col4": st.empty(),
-            }
+# # 📌 Display Current Calculated Indicators
+# def display_indicators(asset, indicators):
+#     if indicators:
+#         # Check if the indicators have already been displayed
+#         if "indicators_displayed" not in st.session_state:
+#             st.session_state.indicators_displayed = {}
 
-        # Update the indicators in place
-        st.session_state.indicators_displayed["col1"].markdown(
-            f"<p style='font-size: 14px;'>EMA 9: {indicators['EMA_9'] if indicators['EMA_9'] is not None else 'N/A'}</p>",
-            unsafe_allow_html=True,
-        )
-        st.session_state.indicators_displayed["col2"].markdown(
-            f"<p style='font-size: 14px;'>EMA 21: {indicators['EMA_21'] if indicators['EMA_21'] is not None else 'N/A'}</p>",
-            unsafe_allow_html=True,
-        )
-        st.session_state.indicators_displayed["col3"].markdown(
-            f"<p style='font-size: 14px;'>RSI: {indicators['RSI'] if indicators['RSI'] is not None else 'N/A'}</p>",
-            unsafe_allow_html=True,
-        )
-        st.session_state.indicators_displayed["col4"].markdown(
-            f"<p style='font-size: 14px;'>VWAP: {indicators['VWAP'] if indicators['VWAP'] is not None else 'N/A'}</p>",
-            unsafe_allow_html=True,
-        )
+#         if asset not in st.session_state.indicators_displayed:
+#             st.session_state.indicators_displayed[asset] = {
+#                 "col1": st.empty(),
+#                 "col2": st.empty(),
+#                 "col3": st.empty(),
+#                 "col4": st.empty(),
+#             }
+
+#         # Update the indicators in place
+#         st.session_state.indicators_displayed[asset]["col1"].markdown(
+#             f"<p style='font-size: 14px;'>EMA 9: {indicators['EMA_9'] if indicators['EMA_9'] is not None else 'N/A'}</p>",
+#             unsafe_allow_html=True,
+#         )
+#         st.session_state.indicators_displayed[asset]["col2"].markdown(
+#             f"<p style='font-size: 14px;'>EMA 21: {indicators['EMA_21'] if indicators['EMA_21'] is not None else 'N/A'}</p>",
+#             unsafe_allow_html=True,
+#         )
+#         st.session_state.indicators_displayed[asset]["col3"].markdown(
+#             f"<p style='font-size: 14px;'>RSI: {indicators['RSI'] if indicators['RSI'] is not None else 'N/A'}</p>",
+#             unsafe_allow_html=True,
+#         )
+#         st.session_state.indicators_displayed[asset]["col4"].markdown(
+#             f"<p style='font-size: 14px;'>VWAP: {indicators['VWAP'] if indicators['VWAP'] is not None else 'N/A'}</p>",
+#             unsafe_allow_html=True,
+#         )
+
+
+# 📌 DISPLAY CURRENT CALCULATED INDICATORS IN TABLE FORMAT
+def display_indicators(indicators_dict):
+    if not indicators_dict:
+        return
+
+    # Create a DataFrame from the indicators dictionary
+    indicators_df = pd.DataFrame(indicators_dict).T
+    indicators_df.reset_index(inplace=True)
+    indicators_df.rename(columns={"index": "Asset"}, inplace=True)
+
+    # Use session state to store the table element
+    if "indicators_table" not in st.session_state:
+        st.session_state.indicators_table = st.empty()
+
+    # Update the table content
+    st.session_state.indicators_table.write("### Current Indicators")
+    st.session_state.indicators_table.table(indicators_df)
 
 # 📌 CALCULATE TECHNICAL INDICATORS (EMA, RSI, VWAP)
 def calculate_indicators(epic):
@@ -191,6 +214,7 @@ def calculate_indicators(epic):
     df["rsi"] = ta.momentum.RSIIndicator(df["close"], window=14).rsi()
     df["vwap"] = ta.volume.VolumeWeightedAveragePrice(
         high=df["highPrice"].apply(lambda x: float(x["ask"])),
+
         low=df["lowPrice"].apply(lambda x: float(x["ask"])),
         close=df["close"],
         volume=df["volume"],
@@ -329,12 +353,7 @@ def run_dashboard():
     if "open_positions_displayed" not in st.session_state:
         st.session_state.open_positions_displayed = st.empty()
     if "indicators_displayed" not in st.session_state:
-        st.session_state.indicators_displayed = {
-            "col1": st.empty(),
-            "col2": st.empty(),
-            "col3": st.empty(),
-            "col4": st.empty(),
-        }
+        st.session_state.indicators_displayed = {}
     if "no_signal_info_displayed" not in st.session_state:
         st.session_state.no_signal_info_displayed = False
     if "price_warning_displayed" not in st.session_state:
@@ -349,14 +368,15 @@ def run_dashboard():
         st.session_state.displayed_title = True
 
     # Use session state to track the loop count
+    st.session_state.loop_count += 1
     st.session_state.loop_count_placeholder.markdown(
         f"🔄 **Loop Count:** {st.session_state.loop_count}"
     )
 
-    # 📌 Fetch Market Data
-    market_data = get_market_data(ASSET)
-    indicators = calculate_indicators(ASSET)
-    signal = generate_signal(indicators)
+    # Check if loop count exceeds 100 and reload the script
+    if st.session_state.loop_count > 100:
+        logging.info("Loop count exceeded 100. Reloading the script.")
+        st.experimental_rerun()
 
     # 📌 Fetch Wallet Balance
     balances = get_wallet_balance()
@@ -410,7 +430,7 @@ def run_dashboard():
         upl = position_info.get("upl", 0)
         deal_id = position_info.get("dealId", "Unknown")
 
-        if epic == ASSET:
+        if epic in ASSETS:
             # Example condition to close a position: if unrealized P/L is greater than a certain threshold
             if upl > 15:  # Adjust this value as needed
                 close_position(deal_id)
@@ -421,46 +441,54 @@ def run_dashboard():
                 if "max_positions_message_displayed" in st.session_state:
                     del st.session_state.max_positions_message_displayed
 
-    # 📌 Display Current Calculated Indicators
-    display_indicators(indicators)
+    # 📌 Loop through each asset and generate signals
+    indicators_dict = {}
+    for asset in ASSETS:
+        market_data = get_market_data(asset)
+        indicators = calculate_indicators(asset)
+        signal = generate_signal(indicators)
 
-    # Generate and Execute Trade Signal
-    if signal:
-        open_positions = get_open_positions()
-        if len(open_positions) < 5:
-            price = market_data.get("snapshot", {}).get("offer", "N/A")
-            if price != "N/A":
-                place_trade(signal, ASSET, price)
-                st.markdown(
-                    f"<p style='font-size: 14px; color: green;'>✅ **Trade Executed:** {signal} at ${price} for {ASSET}</p>",
-                    unsafe_allow_html=True,
-                )
-                send_telegram_message(f"✅ Trade Executed: {signal} at ${price} for {ASSET}")
-                st.session_state.no_signal_info_displayed = False
-            else:
-                if not st.session_state.price_warning_displayed:
+        # Store indicators for display
+        if indicators:
+            indicators_dict[asset] = indicators
+
+        # Generate and Execute Trade Signal
+        if signal:
+            open_positions = get_open_positions()
+            if len(open_positions) < 5:
+                price = market_data.get("snapshot", {}).get("offer", "N/A")
+                if price != "N/A":
+                    place_trade(signal, asset, price)
                     st.markdown(
-                        f"<p style='font-size: 14px; color: red;'>⚠️ No valid price for {ASSET}.</p>",
+                        f"<p style='font-size: 14px; color: green;'>✅ **Trade Executed:** {signal} at ${price} for {asset}</p>",
                         unsafe_allow_html=True,
                     )
-                    st.session_state.price_warning_displayed = True
+                    send_telegram_message(f"✅ Trade Executed: {signal} at ${price} for {asset}")
+                    st.session_state.no_signal_info_displayed = False
+                else:
+                    if not st.session_state.price_warning_displayed:
+                        st.markdown(
+                            f"<p style='font-size: 14px; color: red;'>⚠️ No valid price for {asset}.</p>",
+                            unsafe_allow_html=True,
+                        )
+                        st.session_state.price_warning_displayed = True
+            else:
+                if not st.session_state.max_positions_message_displayed:
+                    st.markdown(
+                        "<p style='font-size: 14px; color: orange;'>⚠️ **Max Open Positions Reached. No new trades will be placed.**</p>",
+                        unsafe_allow_html=True,
+                    )
+                    st.session_state.max_positions_message_displayed = True
         else:
-            if not st.session_state.max_positions_message_displayed:
+            if not st.session_state.no_signal_info_displayed:
                 st.markdown(
-                    "<p style='font-size: 14px; color: orange;'>⚠️ **Max Open Positions Reached. No new trades will be placed.**</p>",
+                    "<p style='font-size: 14px; color: orange;'>📉 **No Trade Signal Generated**</p>",
                     unsafe_allow_html=True,
                 )
-                st.session_state.max_positions_message_displayed = True
-    else:
-        if not st.session_state.no_signal_info_displayed:
-            st.markdown(
-                "<p style='font-size: 14px; color: orange;'>📉 **No Trade Signal Generated**</p>",
-                unsafe_allow_html=True,
-            )
-            st.session_state.no_signal_info_displayed = True
+                st.session_state.no_signal_info_displayed = True
 
-    # Increment the loop count
-    st.session_state.loop_count += 1
+    # Display indicators for all assets in a table
+    display_indicators(indicators_dict)
 
 # 📌 MAIN LOOP
 if __name__ == "__main__":
